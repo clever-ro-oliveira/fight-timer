@@ -39,7 +39,7 @@ class _TimerScreenState extends State<TimerScreen> {
   void initState() {
     super.initState();
     WakelockPlus.enable();
-    _play('fight_start.mp3');
+    _initAudio();
     _watch.start();
     _ticker = Timer.periodic(const Duration(milliseconds: 100), (_) => _tick());
   }
@@ -52,9 +52,36 @@ class _TimerScreenState extends State<TimerScreen> {
     super.dispose();
   }
 
+  Future<void> _initAudio() async {
+    // SoundPool (lowLatency) evita travamentos do MediaPlayer ao mudar de
+    // rota de áudio (ex.: espelhamento de tela); foco transitório com
+    // "duck" abaixa a música de fundo (Spotify etc.) durante o som e
+    // devolve o volume sozinho, em vez de travar/pausar o outro app.
+    await _player.setPlayerMode(PlayerMode.lowLatency);
+    await _player.setAudioContext(AudioContext(
+      android: const AudioContextAndroid(
+        contentType: AndroidContentType.sonification,
+        usageType: AndroidUsageType.assistanceSonification,
+        audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+      ),
+      iOS: AudioContextIOS(
+        category: AVAudioSessionCategory.ambient,
+        options: {
+          AVAudioSessionOptions.mixWithOthers,
+          AVAudioSessionOptions.duckOthers,
+        },
+      ),
+    ));
+    _play('fight_start.mp3');
+  }
+
   Future<void> _play(String file) async {
-    await _player.stop();
-    await _player.play(AssetSource('sounds/$file'));
+    try {
+      await _player.stop();
+      await _player.play(AssetSource('sounds/$file'));
+    } catch (_) {
+      // Falha pontual de áudio (ex.: foco negado) não deve travar o timer.
+    }
   }
 
   void _tick() {
