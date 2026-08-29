@@ -72,6 +72,12 @@ class _TimerScreenState extends State<TimerScreen> {
     // SoundPool (lowLatency) evita travamentos do MediaPlayer ao mudar de
     // rota de áudio (ex.: espelhamento de tela).
     await _player.setPlayerMode(PlayerMode.lowLatency);
+    // O audioplayers pede foco de áudio "exclusivo" (pausa outros apps) por
+    // padrão sempre que toca um som — desligamos isso aqui para que só o
+    // audio_session, abaixo, negocie o foco (com "duck", não pausa).
+    await _player.setAudioContext(AudioContext(
+      android: const AudioContextAndroid(audioFocus: AndroidAudioFocus.none),
+    ));
 
     // audio_session controla o foco de áudio diretamente — abaixa a música
     // de fundo (Spotify etc.) enquanto ativo e devolve o volume ao
