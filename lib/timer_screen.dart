@@ -22,6 +22,7 @@ class _TimerScreenState extends State<TimerScreen> {
   final _player = AudioPlayer();
   final _watch = Stopwatch();
   Timer? _ticker;
+  StreamSubscription<void>? _completeSub;
 
   Phase _phase = Phase.fight;
   int _round = 1;
@@ -47,6 +48,7 @@ class _TimerScreenState extends State<TimerScreen> {
   @override
   void dispose() {
     _ticker?.cancel();
+    _completeSub?.cancel();
     _player.dispose();
     WakelockPlus.disable();
     super.dispose();
@@ -72,6 +74,9 @@ class _TimerScreenState extends State<TimerScreen> {
         },
       ),
     ));
+    // Solta o foco de áudio assim que o som termina, para o Android
+    // devolver o volume da música de fundo em vez de deixá-la abaixada.
+    _completeSub = _player.onPlayerComplete.listen((_) => _player.stop());
     _play('fight_start.mp3');
   }
 
