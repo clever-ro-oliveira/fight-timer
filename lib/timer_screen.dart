@@ -1,10 +1,22 @@
 import 'dart:async';
 
+import 'package:audio_session/audio_session.dart' as session;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'settings.dart';
+
+// Duração de cada efeito sonoro + folga, usada para saber por quanto tempo
+// manter a música de fundo (Spotify etc.) abaixada. Não depende do evento
+// "terminou de tocar" do player, que se mostrou pouco confiável no modo de
+// baixa latência usado aqui.
+const _fightStartDuckDuration = Duration(milliseconds: 1300);
+const _fightEndDuckDuration = Duration(milliseconds: 3300);
+// O bip dura bem menos que 1s, mas os três tocam de segundo em segundo:
+// mantemos o foco preso por 1s inteiro para não soltar e re-abaixar a
+// música entre um bip e outro (isso soava como uma "piscada" de volume).
+const _bipDuckDuration = Duration(milliseconds: 1000);
 
 enum Phase { fight, rest, finished }
 
@@ -22,7 +34,8 @@ class _TimerScreenState extends State<TimerScreen> {
   final _player = AudioPlayer();
   final _watch = Stopwatch();
   Timer? _ticker;
-  StreamSubscription<void>? _completeSub;
+  Timer? _duckReleaseTimer;
+  session.AudioSession? _audioSession;
 
   Phase _phase = Phase.fight;
   int _round = 1;
@@ -48,7 +61,8 @@ class _TimerScreenState extends State<TimerScreen> {
   @override
   void dispose() {
     _ticker?.cancel();
-    _completeSub?.cancel();
+    _duckReleaseTimer?.cancel();
+    _audioSession?.setActive(false);
     _player.dispose();
     WakelockPlus.disable();
     super.dispose();
@@ -56,34 +70,41 @@ class _TimerScreenState extends State<TimerScreen> {
 
   Future<void> _initAudio() async {
     // SoundPool (lowLatency) evita travamentos do MediaPlayer ao mudar de
-    // rota de áudio (ex.: espelhamento de tela); foco transitório com
-    // "duck" abaixa a música de fundo (Spotify etc.) durante o som e
-    // devolve o volume sozinho, em vez de travar/pausar o outro app.
+    // rota de áudio (ex.: espelhamento de tela).
     await _player.setPlayerMode(PlayerMode.lowLatency);
-    await _player.setAudioContext(AudioContext(
-      android: const AudioContextAndroid(
-        contentType: AndroidContentType.sonification,
-        usageType: AndroidUsageType.assistanceSonification,
-        audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+
+    // audio_session controla o foco de áudio diretamente — abaixa a música
+    // de fundo (Spotify etc.) enquanto ativo e devolve o volume ao
+    // desativar. Controlamos essa ativação/desativação nós mesmos (com
+    // temporizadores), em vez de depender do player avisar quando o som
+    // termina.
+    final audioSession = await session.AudioSession.instance;
+    await audioSession.configure(const session.AudioSessionConfiguration(
+      avAudioSessionCategory: session.AVAudioSessionCategory.ambient,
+      avAudioSessionCategoryOptions:
+          session.AVAudioSessionCategoryOptions.duckOthers,
+      androidAudioAttributes: session.AndroidAudioAttributes(
+        contentType: session.AndroidAudioContentType.sonification,
+        usage: session.AndroidAudioUsage.assistanceSonification,
       ),
-      iOS: AudioContextIOS(
-        category: AVAudioSessionCategory.ambient,
-        options: {
-          AVAudioSessionOptions.mixWithOthers,
-          AVAudioSessionOptions.duckOthers,
-        },
-      ),
+      androidAudioFocusGainType:
+          session.AndroidAudioFocusGainType.gainTransientMayDuck,
+      androidWillPauseWhenDucked: false,
     ));
-    // Solta o foco de áudio assim que o som termina, para o Android
-    // devolver o volume da música de fundo em vez de deixá-la abaixada.
-    _completeSub = _player.onPlayerComplete.listen((_) => _player.stop());
-    _play('fight_start.mp3');
+    _audioSession = audioSession;
+
+    _play('fight_start.mp3', _fightStartDuckDuration);
   }
 
-  Future<void> _play(String file) async {
+  Future<void> _play(String file, Duration duckDuration) async {
     try {
+      await _audioSession?.setActive(true);
       await _player.stop();
       await _player.play(AssetSource('sounds/$file'));
+      _duckReleaseTimer?.cancel();
+      _duckReleaseTimer = Timer(duckDuration, () {
+        _audioSession?.setActive(false);
+      });
     } catch (_) {
       // Falha pontual de áudio (ex.: foco negado) não deve travar o timer.
     }
@@ -100,7 +121,7 @@ class _TimerScreenState extends State<TimerScreen> {
         remaining <= 3 &&
         remaining != _lastBipSecond) {
       _lastBipSecond = remaining;
-      _play('bip.mp3');
+      _play('bip.mp3', _bipDuckDuration);
     }
 
     if (_watch.elapsedMilliseconds >= _phaseLength * 1000) {
@@ -119,21 +140,21 @@ class _TimerScreenState extends State<TimerScreen> {
     if (_phase == Phase.fight) {
       if (_round >= s.rounds) {
         _phase = Phase.finished;
-        _play('fight_end.mp3');
+        _play('fight_end.mp3', _fightEndDuckDuration);
         return;
       }
       if (s.restSeconds == 0) {
         // Sem descanso: emenda direto na próxima luta.
         _round++;
-        _play('fight_end.mp3');
+        _play('fight_end.mp3', _fightEndDuckDuration);
       } else {
         _phase = Phase.rest;
-        _play('fight_end.mp3');
+        _play('fight_end.mp3', _fightEndDuckDuration);
       }
     } else {
       _phase = Phase.fight;
       _round++;
-      _play('fight_start.mp3');
+      _play('fight_start.mp3', _fightStartDuckDuration);
     }
     _watch.start();
   }
