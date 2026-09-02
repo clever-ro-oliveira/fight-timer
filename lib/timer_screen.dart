@@ -280,88 +280,95 @@ class _TimerScreenState extends State<TimerScreen> {
           onTap: _togglePause,
           child: Stack(
             children: [
-              Column(
-                children: [
-                  // Logo da academia
-                  Expanded(
-                    flex: 3,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: s.logoBytes != null
-                          ? Image.memory(s.logoBytes!, fit: BoxFit.contain)
-                          : Image.asset(
-                              'assets/images/logo.jpeg',
-                              fit: BoxFit.contain,
-                            ),
-                    ),
-                  ),
-                  // LUTA X/N ou DESCANSO
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 4,
-                      color: accent,
-                    ),
-                  ),
-                  // Tempo
-                  Expanded(
-                    flex: 5,
-                    child: finished
-                        ? Center(
-                            child: FilledButton.icon(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: Colors.green.shade700,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 32,
-                                  vertical: 16,
-                                ),
-                                textStyle: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
+              // Positioned.fill força o Column a ocupar a tela inteira: sem
+              // isso, o Column encolhe para caber no filho mais largo (o
+              // FittedBox do relógio não cresce além do tamanho natural do
+              // texto) e o Stack posiciona esse conteúdo encolhido no canto
+              // superior esquerdo, em vez de centralizado.
+              Positioned.fill(
+                child: Column(
+                  children: [
+                    // Logo da academia
+                    Expanded(
+                      flex: 3,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: s.logoBytes != null
+                            ? Image.memory(s.logoBytes!, fit: BoxFit.contain)
+                            : Image.asset(
+                                'assets/images/logo.jpeg',
+                                fit: BoxFit.contain,
                               ),
-                              onPressed: () => Navigator.of(context).pop(),
-                              icon: const Icon(Icons.replay),
-                              label: const Text('VOLTAR'),
-                            ),
-                          )
-                        : FittedBox(
-                            fit: BoxFit.contain,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                              ),
-                              child: Text(
-                                formatTime(displaySeconds),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  color: _paused
-                                      ? Colors.white38
-                                      : Colors.white,
-                                  fontSize: 200,
-                                  height: 1,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures(),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                  ),
-                  // Lutas restantes
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      bottomText,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        color: Colors.white70,
                       ),
                     ),
-                  ),
-                ],
+                    // LUTA X/N ou DESCANSO
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 4,
+                        color: accent,
+                      ),
+                    ),
+                    // Tempo
+                    Expanded(
+                      flex: 5,
+                      child: finished
+                          ? Center(
+                              child: FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.green.shade700,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 32,
+                                    vertical: 16,
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                onPressed: () => Navigator.of(context).pop(),
+                                icon: const Icon(Icons.replay),
+                                label: const Text('VOLTAR'),
+                              ),
+                            )
+                          : FittedBox(
+                              fit: BoxFit.contain,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                ),
+                                child: Text(
+                                  formatTime(displaySeconds),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: _paused
+                                        ? Colors.white38
+                                        : Colors.white,
+                                    fontSize: 200,
+                                    height: 1,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures(),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                    ),
+                    // Lutas restantes
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        bottomText,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               // Indicador de pausa
               if (_paused)
