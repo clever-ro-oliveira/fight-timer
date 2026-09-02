@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:audio_session/audio_session.dart' as session;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'settings.dart';
@@ -58,6 +59,11 @@ class _TimerScreenState extends State<TimerScreen> {
     super.initState();
     _phase = s.prepSeconds > 0 ? Phase.prep : Phase.fight;
     WakelockPlus.enable();
+    // Esconde a barra de navegação do sistema enquanto o timer está na
+    // tela: em vários celulares ela ocupa uma faixa lateral fixa em modo
+    // paisagem (fora da área que o app desenha), o que empurrava todo o
+    // conteúdo para longe do centro real da tela física.
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _initAudio();
     _watch.start();
     _ticker = Timer.periodic(const Duration(milliseconds: 100), (_) => _tick());
@@ -70,6 +76,7 @@ class _TimerScreenState extends State<TimerScreen> {
     _audioSession?.setActive(false);
     _player.dispose();
     WakelockPlus.disable();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
