@@ -18,7 +18,7 @@ const _fightEndDuckDuration = Duration(milliseconds: 3300);
 // música entre um bip e outro (isso soava como uma "piscada" de volume).
 const _bipDuckDuration = Duration(milliseconds: 1000);
 
-enum Phase { fight, rest, finished }
+enum Phase { prep, fight, rest, finished }
 
 /// Tela 2 — Timer do treino.
 class TimerScreen extends StatefulWidget {
@@ -37,21 +37,26 @@ class _TimerScreenState extends State<TimerScreen> {
   Timer? _duckReleaseTimer;
   session.AudioSession? _audioSession;
 
-  Phase _phase = Phase.fight;
+  late Phase _phase;
   int _round = 1;
   bool _paused = false;
   int _lastBipSecond = 0;
 
   TimerSettings get s => widget.settings;
 
-  int get _phaseLength =>
-      _phase == Phase.fight ? s.fightSeconds : s.restSeconds;
+  int get _phaseLength => switch (_phase) {
+    Phase.prep => s.prepSeconds,
+    Phase.fight => s.fightSeconds,
+    Phase.rest => s.restSeconds,
+    Phase.finished => 0,
+  };
 
   int get _elapsed => _watch.elapsedMilliseconds ~/ 1000;
 
   @override
   void initState() {
     super.initState();
+    _phase = s.prepSeconds > 0 ? Phase.prep : Phase.fight;
     WakelockPlus.enable();
     _initAudio();
     _watch.start();
@@ -75,9 +80,11 @@ class _TimerScreenState extends State<TimerScreen> {
     // O audioplayers pede foco de áudio "exclusivo" (pausa outros apps) por
     // padrão sempre que toca um som — desligamos isso aqui para que só o
     // audio_session, abaixo, negocie o foco (com "duck", não pausa).
-    await _player.setAudioContext(AudioContext(
-      android: const AudioContextAndroid(audioFocus: AndroidAudioFocus.none),
-    ));
+    await _player.setAudioContext(
+      AudioContext(
+        android: const AudioContextAndroid(audioFocus: AndroidAudioFocus.none),
+      ),
+    );
 
     // audio_session controla o foco de áudio diretamente — abaixa a música
     // de fundo (Spotify etc.) enquanto ativo e devolve o volume ao
@@ -85,21 +92,28 @@ class _TimerScreenState extends State<TimerScreen> {
     // temporizadores), em vez de depender do player avisar quando o som
     // termina.
     final audioSession = await session.AudioSession.instance;
-    await audioSession.configure(const session.AudioSessionConfiguration(
-      avAudioSessionCategory: session.AVAudioSessionCategory.ambient,
-      avAudioSessionCategoryOptions:
-          session.AVAudioSessionCategoryOptions.duckOthers,
-      androidAudioAttributes: session.AndroidAudioAttributes(
-        contentType: session.AndroidAudioContentType.sonification,
-        usage: session.AndroidAudioUsage.assistanceSonification,
+    await audioSession.configure(
+      const session.AudioSessionConfiguration(
+        avAudioSessionCategory: session.AVAudioSessionCategory.ambient,
+        avAudioSessionCategoryOptions:
+            session.AVAudioSessionCategoryOptions.duckOthers,
+        androidAudioAttributes: session.AndroidAudioAttributes(
+          contentType: session.AndroidAudioContentType.sonification,
+          usage: session.AndroidAudioUsage.assistanceSonification,
+        ),
+        androidAudioFocusGainType:
+            session.AndroidAudioFocusGainType.gainTransientMayDuck,
+        androidWillPauseWhenDucked: false,
       ),
-      androidAudioFocusGainType:
-          session.AndroidAudioFocusGainType.gainTransientMayDuck,
-      androidWillPauseWhenDucked: false,
-    ));
+    );
     _audioSession = audioSession;
 
-    _play('fight_start.mp3', _fightStartDuckDuration);
+    // Se houver preparação, ela começa em silêncio (com bips nos últimos 3
+    // segundos, como o fim de qualquer round) — o gongo de início só toca
+    // quando a luta de fato começa.
+    if (_phase == Phase.fight) {
+      _play('fight_start.mp3', _fightStartDuckDuration);
+    }
   }
 
   Future<void> _play(String file, Duration duckDuration) async {
@@ -121,8 +135,8 @@ class _TimerScreenState extends State<TimerScreen> {
 
     final remaining = _phaseLength - _elapsed;
 
-    // Bip nos últimos 3 segundos da luta (3, 2 e 1).
-    if (_phase == Phase.fight &&
+    // Bip nos últimos 3 segundos da luta ou da preparação (3, 2 e 1).
+    if ((_phase == Phase.fight || _phase == Phase.prep) &&
         remaining >= 1 &&
         remaining <= 3 &&
         remaining != _lastBipSecond) {
@@ -143,7 +157,10 @@ class _TimerScreenState extends State<TimerScreen> {
       ..reset();
     _lastBipSecond = 0;
 
-    if (_phase == Phase.fight) {
+    if (_phase == Phase.prep) {
+      _phase = Phase.fight;
+      _play('fight_start.mp3', _fightStartDuckDuration);
+    } else if (_phase == Phase.fight) {
       if (_round >= s.rounds) {
         _phase = Phase.finished;
         _play('fight_end.mp3', _fightEndDuckDuration);
@@ -206,32 +223,36 @@ class _TimerScreenState extends State<TimerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isFight = _phase == Phase.fight;
     final finished = _phase == Phase.finished;
-    final accent = finished
-        ? Colors.green
-        : isFight
-            ? Colors.red.shade600
-            : Colors.amber.shade600;
+    final accent = switch (_phase) {
+      Phase.prep => Colors.blue.shade400,
+      Phase.fight => Colors.red.shade600,
+      Phase.rest => Colors.amber.shade600,
+      Phase.finished => Colors.green,
+    };
 
     final remainingFights = s.rounds - _round;
     final displaySeconds = s.countDown
         ? (_phaseLength - _elapsed).clamp(0, _phaseLength)
         : _elapsed.clamp(0, _phaseLength);
 
-    final label = finished
-        ? 'TREINO CONCLUÍDO'
-        : isFight
-            ? 'LUTA $_round/${s.rounds}'
-            : 'DESCANSO';
+    final label = switch (_phase) {
+      Phase.prep => 'PREPARE-SE',
+      Phase.fight => 'LUTA $_round/${s.rounds}',
+      Phase.rest => 'DESCANSO',
+      Phase.finished => 'TREINO CONCLUÍDO',
+    };
 
-    final bottomText = finished
-        ? 'Bom trabalho!'
-        : remainingFights == 0
+    final bottomText = switch (_phase) {
+      Phase.prep => 'A luta 1 está prestes a começar',
+      Phase.finished => 'Bom trabalho!',
+      _ =>
+        remainingFights == 0
             ? 'Última luta'
             : remainingFights == 1
-                ? 'Falta 1 luta'
-                : 'Faltam $remainingFights lutas';
+            ? 'Falta 1 luta'
+            : 'Faltam $remainingFights lutas',
+    };
 
     return PopScope(
       canPop: false,
@@ -240,116 +261,138 @@ class _TimerScreenState extends State<TimerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: SafeArea(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _togglePause,
-            child: Stack(
-              children: [
-                Column(
-                  children: [
-                    // Logo da academia
-                    Expanded(
-                      flex: 3,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: s.logoBytes != null
-                            ? Image.memory(s.logoBytes!, fit: BoxFit.contain)
-                            : Image.asset('assets/images/logo.jpeg',
-                                fit: BoxFit.contain),
-                      ),
-                    ),
-                    // LUTA X/N ou DESCANSO
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 4,
-                        color: accent,
-                      ),
-                    ),
-                    // Tempo
-                    Expanded(
-                      flex: 5,
-                      child: finished
-                          ? Center(
-                              child: FilledButton.icon(
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: Colors.green.shade700,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 32, vertical: 16),
-                                  textStyle: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold),
-                                ),
-                                onPressed: () => Navigator.of(context).pop(),
-                                icon: const Icon(Icons.replay),
-                                label: const Text('VOLTAR'),
-                              ),
-                            )
-                          : FittedBox(
+        // Sem SafeArea aqui: em vários celulares (ao contrário de tablets)
+        // a barra de navegação do sistema, na horizontal, ocupa uma faixa
+        // vertical de só um dos lados da tela — se todo o conteúdo
+        // respeitasse essa margem, o timer pareceria "puxado" para o lado
+        // em vez de centralizado na tela física. O conteúdo visual ocupa a
+        // tela inteira; só os botões de canto (fechar/pausar) respeitam a
+        // área segura individualmente, para não ficarem sob a barra.
+        body: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _togglePause,
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  // Logo da academia
+                  Expanded(
+                    flex: 3,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: s.logoBytes != null
+                          ? Image.memory(s.logoBytes!, fit: BoxFit.contain)
+                          : Image.asset(
+                              'assets/images/logo.jpeg',
                               fit: BoxFit.contain,
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 24),
-                                child: Text(
-                                  formatTime(displaySeconds),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    color:
-                                        _paused ? Colors.white38 : Colors.white,
-                                    fontSize: 200,
-                                    height: 1,
-                                    fontFeatures: const [
-                                      FontFeature.tabularFigures()
-                                    ],
-                                  ),
+                            ),
+                    ),
+                  ),
+                  // LUTA X/N ou DESCANSO
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 4,
+                      color: accent,
+                    ),
+                  ),
+                  // Tempo
+                  Expanded(
+                    flex: 5,
+                    child: finished
+                        ? Center(
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Colors.green.shade700,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 32,
+                                  vertical: 16,
+                                ),
+                                textStyle: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              onPressed: () => Navigator.of(context).pop(),
+                              icon: const Icon(Icons.replay),
+                              label: const Text('VOLTAR'),
+                            ),
+                          )
+                        : FittedBox(
+                            fit: BoxFit.contain,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                              ),
+                              child: Text(
+                                formatTime(displaySeconds),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: _paused
+                                      ? Colors.white38
+                                      : Colors.white,
+                                  fontSize: 200,
+                                  height: 1,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
                                 ),
                               ),
                             ),
-                    ),
-                    // Lutas restantes
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        bottomText,
-                        style: const TextStyle(
-                            fontSize: 20, color: Colors.white70),
-                      ),
-                    ),
-                  ],
-                ),
-                // Indicador de pausa
-                if (_paused)
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.black87,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: const Text(
-                        'PAUSADO — toque para continuar',
-                        style: TextStyle(fontSize: 22, color: Colors.white),
+                          ),
+                  ),
+                  // Lutas restantes
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      bottomText,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        color: Colors.white70,
                       ),
                     ),
                   ),
-                // Botões de canto
-                Positioned(
-                  top: 0,
-                  right: 0,
+                ],
+              ),
+              // Indicador de pausa
+              if (_paused)
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: const Text(
+                      'PAUSADO — toque para continuar',
+                      style: TextStyle(fontSize: 22, color: Colors.white),
+                    ),
+                  ),
+                ),
+              // Botões de canto — respeitam a área segura individualmente,
+              // já que o conteúdo principal ignora a SafeArea para ficar
+              // centralizado na tela física inteira.
+              Positioned(
+                top: 0,
+                right: 0,
+                child: SafeArea(
                   child: IconButton(
                     onPressed: _confirmExit,
                     icon: const Icon(Icons.close, color: Colors.white54),
                   ),
                 ),
-                if (!finished)
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
+              ),
+              if (!finished)
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: SafeArea(
                     child: IconButton(
                       onPressed: _togglePause,
                       icon: Icon(
@@ -359,8 +402,8 @@ class _TimerScreenState extends State<TimerScreen> {
                       ),
                     ),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         ),
       ),

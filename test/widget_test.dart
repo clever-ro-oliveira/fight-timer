@@ -10,6 +10,7 @@ void main() {
     await tester.pumpWidget(const TimerApp());
     await tester.pumpAndSettle();
 
+    expect(find.text('Preparação'), findsOneWidget);
     expect(find.text('Número de lutas'), findsOneWidget);
     expect(find.text('Tempo de luta'), findsOneWidget);
     expect(find.text('Tempo de descanso'), findsOneWidget);

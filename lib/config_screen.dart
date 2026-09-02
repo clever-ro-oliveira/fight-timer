@@ -224,6 +224,20 @@ class _ConfigScreenState extends State<ConfigScreen> {
                           children: [
                             const SizedBox(height: 12),
                             _NumberRow(
+                              label: 'Preparação',
+                              value: formatTime(s.prepSeconds),
+                              onTapValue: () => _editTime(
+                                title: 'Preparação',
+                                currentSeconds: s.prepSeconds,
+                                minSeconds: 0,
+                                apply: (v) => s.prepSeconds = v,
+                              ),
+                              onMinus: () => setState(() => s.prepSeconds =
+                                  (s.prepSeconds - 5).clamp(0, 59 * 60)),
+                              onPlus: () => setState(() => s.prepSeconds =
+                                  (s.prepSeconds + 5).clamp(0, 59 * 60)),
+                            ),
+                            _NumberRow(
                               label: 'Número de lutas',
                               value: s.rounds.toString(),
                               onTapValue: _editRounds,

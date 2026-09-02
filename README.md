@@ -14,6 +14,7 @@
 
 ## ✨ Funcionalidades
 
+- ⏱️ **Tempo de preparação** — contagem opcional antes da primeira luta, para todos se prepararem
 - 🥋 **Rounds configuráveis** — defina quantas lutas, tempo de luta e tempo de descanso
 - ⌨️ **Entrada rápida** — digite os valores diretamente ou ajuste com − / +
 - 🔔 **Sons de treino reais** — sino de luta na largada, alerta de encerramento no fim e bips de contagem nos últimos 3 segundos do round

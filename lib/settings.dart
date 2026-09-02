@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Configurações do treino, persistidas entre sessões.
 class TimerSettings {
   int rounds;
+  int prepSeconds;
   int fightSeconds;
   int restSeconds;
   bool countDown;
@@ -16,6 +17,7 @@ class TimerSettings {
 
   TimerSettings({
     this.rounds = 10,
+    this.prepSeconds = 10,
     this.fightSeconds = 3 * 60,
     this.restSeconds = 60,
     this.countDown = true,
@@ -27,6 +29,7 @@ class TimerSettings {
     final logoBase64 = prefs.getString('logoBase64');
     return TimerSettings(
       rounds: prefs.getInt('rounds') ?? 10,
+      prepSeconds: prefs.getInt('prepSeconds') ?? 10,
       fightSeconds: prefs.getInt('fightSeconds') ?? 3 * 60,
       restSeconds: prefs.getInt('restSeconds') ?? 60,
       countDown: prefs.getBool('countDown') ?? true,
@@ -37,6 +40,7 @@ class TimerSettings {
   Future<void> save() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('rounds', rounds);
+    await prefs.setInt('prepSeconds', prepSeconds);
     await prefs.setInt('fightSeconds', fightSeconds);
     await prefs.setInt('restSeconds', restSeconds);
     await prefs.setBool('countDown', countDown);
